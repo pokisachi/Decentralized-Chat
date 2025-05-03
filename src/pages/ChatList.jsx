@@ -31,7 +31,7 @@ export default function ChatList() {
         name: 'Chat cá nhân',
         key: PRIVATE_KEY,
         preview: getPreview(privHist),
-        path: '/chat'
+        path: '/contacts'
       },
       {
         id: 'group',

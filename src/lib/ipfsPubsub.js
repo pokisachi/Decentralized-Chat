@@ -7,8 +7,8 @@ const ipfs = create({ url: 'http://127.0.0.1:5001/api/v0' })
 // Lưu trữ các listeners đã đăng ký
 const listeners = new Map()
 
-// Đã subscribe PubSub chưa
-let _subscribed = false
+// Đã subscribe PubSub cho topic nào
+const subscribedTopics = new Set()
 
 // Dedupe store: lưu các key đã xử lý
 const processedMessages = new Map()
@@ -36,8 +36,8 @@ export async function getOrCreatePeerId() {
 }
 
 async function _ensureSubscribed(topic) {
-  if (_subscribed) return
-  _subscribed = true
+  if (subscribedTopics.has(topic)) return
+  subscribedTopics.add(topic)
   const peerId = await getOrCreatePeerId()
 
   await ipfs.pubsub.subscribe(topic, async msg => {
@@ -66,8 +66,10 @@ async function _ensureSubscribed(topic) {
       id: messageData.id || dedupeKey,
       from,
       text: messageData.text,
-      timestamp: messageData.timestamp
+      timestamp: messageData.timestamp,
+      ...messageData // merge thêm các trường khác như senderAddress
     }
+    console.log('Nhận được PubSub message:', topic, message)
     for (const cb of listeners.values()) cb(message)
   })
 }
@@ -83,12 +85,16 @@ export function subscribeTopic(topic, onMessage) {
   return () => unsub()
 }
 
-export async function publishMessage(topic, text, messageId = null) {
+export async function publishMessage(topic, text, messageId = null, metadata = {}) {
   const id = messageId || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
-  const messageData = { id, text, timestamp: Date.now() }
+  const messageData = { id, text, timestamp: Date.now(), ...metadata }
   const data = new TextEncoder().encode(JSON.stringify(messageData))
-  await ipfs.pubsub.publish(topic, data)
-  // Mark to prevent echo-self
+  try {
+    await ipfs.pubsub.publish(topic, data)
+    console.log('Đã gửi pubsub:', topic, messageData)
+  } catch (err) {
+    console.error('Lỗi gửi pubsub:', err)
+  }
   processedMessages.set(id, Date.now())
   return messageData
 }

@@ -1,6 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Dark mode support */
+:root {
+  --background: #f8fafc;
+  --foreground: #222;
+}
+.dark {
+  --background: #18181b;
+  --foreground: #f4f4f5;
+}
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', sans-serif;
+}
+html {
+  font-family: 'Inter', sans-serif;
+}
 
 @layer base {
   :root {
@@ -8,8 +27,6 @@
     --border: 0 0% 90%;
     --input: 0 0% 100%;
     --ring: 214 65% 95%;
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
     --primary: 222 47% 11%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 98%;

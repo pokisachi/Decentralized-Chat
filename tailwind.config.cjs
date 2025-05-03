@@ -7,17 +7,42 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
-        secondary: { DEFAULT: "hsl(var(--secondary))", foreground: "hsl(var(--secondary-foreground))" },
-        accent: { DEFAULT: "hsl(var(--accent))", foreground: "hsl(var(--accent-foreground))" },
-        muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
-        popover: { DEFAULT: "hsl(var(--popover))", foreground: "hsl(var(--popover-foreground))" },
-        card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
+        primary: {
+          DEFAULT: '#1E3A8A',
+          foreground: '#FFFFFF',
+        },
+        secondary: {
+          DEFAULT: '#10B981',
+          foreground: '#FFFFFF',
+        },
+        accent: {
+          DEFAULT: '#F59E0B',
+          foreground: '#FFFFFF',
+        },
+        background: {
+          light: '#F3F4F6',
+          dark: '#1F2937',
+        },
+        text: {
+          main: '#111827',
+          muted: '#6B7280',
+        },
+        border: '#E5E7EB',
+      },
+      fontFamily: {
+        inter: ['Inter', 'sans-serif'],
+      },
+      borderRadius: {
+        lg: '12px',
+      },
+      spacing: {
+        18: '4.5rem',
+        22: '5.5rem',
+        26: '6.5rem',
+        30: '7.5rem',
+      },
+      boxShadow: {
+        chat: '0 2px 8px 0 rgba(30,58,138,0.08)',
       },
     },
   },

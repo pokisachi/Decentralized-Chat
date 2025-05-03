@@ -5,8 +5,7 @@ import ChatList from "@/pages/ChatList";
 import ChatRoom from "@/pages/ChatRoom";
 import Profile from "@/pages/Profile";
 import GroupChat from "@/pages/GroupChat";
-import ContactsPage from './pages/ContactsPage';
-import signaling from './lib/signaling';
+import Contacts from './pages/Contacts';
 
 
 export default function AppRoutes() {
@@ -17,10 +16,10 @@ export default function AppRoutes() {
         {/* Chat list under /chats */}
         <Route path="/chats" element={<ChatList />} />
         {/* Personal chat under /chat */}
-        <Route path="/chat" element={<ChatRoom />} />
+        <Route path="/chat/:peerId" element={<ChatRoom />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/group" element={<GroupChat />} />
-        <Route path="/contacts" element={<ContactsPage signaling={signaling} />} />
+        <Route path="/contacts" element={<Contacts />} />
     
         {/* Fallback to login */}
         <Route path="*" element={<Navigate to="/login" replace />} />

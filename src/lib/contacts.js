@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'dchat_contacts';
+import { isAddress } from 'ethers';
 
 export function loadContacts() {
   const raw = localStorage.getItem(STORAGE_KEY);
