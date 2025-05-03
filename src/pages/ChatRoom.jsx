@@ -88,6 +88,8 @@ export default function ChatRoom() {
   const [myAvatar, setMyAvatar] = useState('');
   const [peerAvatar, setPeerAvatar] = useState('');
   const [showProfile, setShowProfile] = useState(false);
+  const [recentContacts, setRecentContacts] = useState([]);
+  const [filePreview, setFilePreview] = useState(null);
 
   // Get peerId from URL params
   const { peerId } = useParams();
@@ -282,13 +284,20 @@ export default function ChatRoom() {
             </div>
           )
         };
+        
         setMessages(prev => [...prev, placeholder]);
+        
         try {
-          await downloadFile(obj.cid, (p) => {
-            setFileDownloadProgress((prev) => ({ ...prev, [id]: p }));
+          // Tải file từ IPFS
+          const updateProgress = (p) => {
+            setFileDownloadProgress(prev => ({ ...prev, [id]: p }));
             const progressBar = document.querySelector(`#${id} .bg-blue-600`);
             if (progressBar) progressBar.style.width = `${p}%`;
-          });
+          };
+          
+          await downloadFile(obj.cid, updateProgress);
+          
+          // Cập nhật UI khi tải xong
           const type = fileData.fileType;
           const url = `https://ipfs.io/ipfs/${obj.cid}`;
           setMessages(prev => prev.map(msg => msg.id === id ? {
@@ -304,11 +313,20 @@ export default function ChatRoom() {
             content: <div className="text-red-500">Tải xuống thất bại: {obj.name}</div>
           } : msg));
         }
+        
+        // Lưu vào history
+        saveHistory(roomId, messages);
         return;
       }
     } catch (err) {}
+    
+    // Xử lý tin nhắn text thông thường
     const msg = { from: 'peer', content: data };
     setMessages(prev => [...prev, msg]);
+    
+    // Lưu vào history
+    saveHistory(roomId, messages);
+    
     // Hiển thị toast nếu tab không focus
     if (document.visibilityState !== 'visible') {
       setToast('Bạn có tin nhắn mới!');
@@ -338,20 +356,43 @@ export default function ChatRoom() {
 
   const handleFileChange = (e) => {
     const f = e.target.files?.[0];
-    if (!f) return setFileError('Vui lòng chọn tệp');
-    const err = validateFile(f);
-    if (err) return setFileError(err);
+    if (!f) return;
+    
+    console.log("Đã chọn file:", f.name, f.type, f.size);
+    
+    // Kiểm tra kích thước file (giới hạn 10MB)
+    if (f.size > 10 * 1024 * 1024) {
+      setFileError("File quá lớn (tối đa 10MB)");
+      return;
+    }
+    
     setFile(f);
+    setFileError(null);
+    
+    // Tạo preview nếu là ảnh
+    if (f.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFilePreview(e.target.result);
+      };
+      reader.readAsDataURL(f);
+    } else {
+      setFilePreview(null);
+    }
   };
 
   const handleFileSend = async () => {
     if (!file) return setFileError('Vui lòng chọn tệp trước khi gửi');
     if (!connected) return setError('Kết nối chưa mở');
+    
     setFileError(null);
     setUploadingFile(true);
     setFileUploadProgress(0);
+    
     const type = getFileType(file.name, file.type);
     const id = `upload-${Date.now()}`;
+    
+    // Thêm placeholder message
     const placeholder = {
       from: 'me',
       id,
@@ -366,20 +407,39 @@ export default function ChatRoom() {
         </div>
       )
     };
+    
     setMessages(prev => [...prev, placeholder]);
+    
     try {
+      // Hàm cập nhật UI progress
       const updateProgressUI = (p) => {
         setFileUploadProgress(p);
         const progressBar = document.querySelector(`#${id} .bg-blue-600`);
         if (progressBar) progressBar.style.width = `${p}%`;
       };
-      const { cid } = await uploadFile(file, updateProgressUI);
+      
+      console.log("Bắt đầu upload file:", file.name, file.type, file.size);
+      
+      // Tạo buffer từ file
+      const buffer = await file.arrayBuffer();
+      const fileBuffer = Buffer.from(buffer);
+      
+      console.log("Đã chuyển file thành buffer, kích thước:", fileBuffer.length);
+      
+      // Upload lên IPFS
+      const { cid } = await uploadFile(fileBuffer, updateProgressUI);
+      
+      console.log("Upload thành công, CID:", cid);
+      
+      // Chuẩn bị dữ liệu file
       const fileData = {
         cid,
         name: file.name,
         size: file.size,
         fileType: type
       };
+      
+      // Gửi thông tin file qua WebRTC
       dcRef.current.send(JSON.stringify({
         type: 'file',
         cid,
@@ -387,6 +447,8 @@ export default function ChatRoom() {
         size: file.size,
         fileType: type
       }));
+      
+      // Cập nhật UI với file đã upload
       const url = `https://ipfs.io/ipfs/${cid}`;
       setMessages(prev => prev.map(msg => msg.id === id ? {
         ...msg,
@@ -396,14 +458,19 @@ export default function ChatRoom() {
                  type.isAudio ? <audio src={url} controls className="w-full mt-1" /> :
                  <a href={url} download={file.name} className="text-blue-500 hover:underline">{type.icon} {file.name}</a>
       } : msg));
+      
+      // Lưu vào history
+      saveHistory(roomId, messages);
     } catch (err) {
-      setFileError('Không thể tải lên IPFS. Vui lòng kiểm tra cấu hình project ID và mạng.');
+      console.error("Lỗi upload file:", err);
+      setFileError('Không thể tải lên IPFS: ' + err.message);
       setMessages(prev => prev.map(msg => msg.id === id ? {
         ...msg,
         content: <div className="text-red-500">Tải lên thất bại: {file.name}</div>
       } : msg));
     } finally {
       setFile(null);
+      setFilePreview(null);
       setUploadingFile(false);
       setFileUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -460,6 +527,40 @@ export default function ChatRoom() {
     if (newPeer && newPeer !== peerId) {
       navigate(`/chat/${newPeer}`);
     }
+  };
+
+  // Thêm hàm để thêm liên hệ mới
+  const addToContacts = (address) => {
+    if (!address || contacts.includes(address)) return;
+    
+    const updated = [...contacts, address];
+    setContacts(updated);
+    localStorage.setItem(CONTACTS_KEY, JSON.stringify(updated));
+  };
+
+  // Thêm useEffect để tự động thêm peerId vào danh sách liên hệ
+  useEffect(() => {
+    if (peerId && !contacts.includes(peerId)) {
+      addToContacts(peerId);
+    }
+  }, [peerId, contacts]);
+
+  // Thêm hàm để xóa liên hệ
+  const removeContact = (address) => {
+    if (!address || !contacts.includes(address)) return;
+    
+    const updated = contacts.filter(a => a !== address);
+    setContacts(updated);
+    localStorage.setItem(CONTACTS_KEY, JSON.stringify(updated));
+  };
+
+  // Thêm hàm để đặt biệt danh cho liên hệ
+  const setContactAlias = (address, alias) => {
+    if (!address) return;
+    
+    localStorage.setItem(`alias_${address}`, alias);
+    // Cập nhật UI
+    setToast(`Đã đặt biệt danh cho ${shortId(address)}`);
   };
 
   // Khi vào ChatRoom, nếu peerId chưa có trong danh bạ thì tự động thêm
@@ -533,11 +634,56 @@ export default function ChatRoom() {
         <header className="h-12 flex items-center mb-4">
           <span className="text-xl font-bold text-primary">DChat</span>
         </header>
-        <div className="flex-1 overflow-y-auto space-y-3">
-          {messages.map((m, i) => (
-            <div key={i} className="text-xs text-text-muted">{/* placeholder for recent chats */}</div>
-          ))}
+        
+        <div className="flex-1 overflow-y-auto space-y-4">
+          {/* Danh sách liên hệ gần đây */}
+          <div>
+            <h3 className="font-semibold text-sm mb-2 text-gray-500">Liên hệ gần đây</h3>
+            {contacts.length === 0 ? (
+              <div className="text-gray-400 text-sm">Chưa có liên hệ nào</div>
+            ) : (
+              <ul className="space-y-2">
+                {contacts.map(address => (
+                  <li 
+                    key={address} 
+                    className={`flex items-center gap-3 p-2 rounded-lg hover:bg-primary/10 cursor-pointer transition ${peerId === address ? 'bg-primary/10' : ''}`}
+                    onClick={() => navigate(`/chat/${address}`)}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-primary">
+                      {localStorage.getItem('avatar_' + address) ? 
+                        <img src={localStorage.getItem('avatar_' + address)} alt="avatar" className="w-10 h-10 rounded-full object-cover" /> : 
+                        address[2].toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">{localStorage.getItem(`alias_${address}`) || shortId(address)}</div>
+                      <div className="text-xs text-gray-500">{address.slice(0, 6)}...{address.slice(-4)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          
+          {/* Tin nhắn gần đây */}
+          <div>
+            <h3 className="font-semibold text-sm mb-2 text-gray-500">Tin nhắn gần đây</h3>
+            {messages.length === 0 ? (
+              <div className="text-gray-400 text-sm">Chưa có tin nhắn nào</div>
+            ) : (
+              <div className="text-xs text-gray-500">
+                {messages.length} tin nhắn với {shortId(peerId)}
+              </div>
+            )}
+          </div>
         </div>
+        
+        {/* Nút thêm liên hệ mới */}
+        <button 
+          onClick={() => navigate('/contacts')} 
+          className="mt-4 w-full bg-primary text-white py-2 rounded-lg font-medium hover:bg-primary/90 transition"
+        >
+          Quản lý danh bạ
+        </button>
       </aside>
 
       {/* Main chat area */}
@@ -595,31 +741,89 @@ export default function ChatRoom() {
         </div>
 
         {/* Input area */}
-        <div className="p-4 border-t border-border bg-white dark:bg-gray-800 flex items-center gap-3">
-          {!myAddress ? (
-            <button onClick={connectWallet} className="w-full bg-primary text-white py-2 rounded">
-              Kết nối ví để chat
-            </button>
-          ) : (
-            <>
-              <label className="cursor-pointer p-2 bg-gray-200 rounded-full">
-                📎
-                <input type="file" onChange={handleFileChange} className="hidden" disabled={!connected} />
-              </label>
-              <input
-                type="text"
-                value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder={connected ? 'Nhập tin nhắn...' : 'Đang chờ kết nối...'}
-                className="flex-1 border border-border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-700 text-text-main dark:text-white"
-                disabled={!connected}
-              />
-              <button onClick={handleSend} disabled={!connected || !text.trim()} className="bg-accent text-white px-4 py-2 rounded disabled:bg-accent/50">
-                Gửi
-              </button>
-            </>
+        <div className="p-4 border-t border-border bg-white dark:bg-gray-800 flex flex-col">
+          {/* Hiển thị file đã chọn */}
+          {file && (
+            <div className="mb-3 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-between">
+              <div className="flex items-center">
+                {filePreview ? (
+                  <img src={filePreview} alt="Preview" className="w-12 h-12 object-cover rounded mr-2" />
+                ) : (
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center mr-2">
+                    {getFileType(file.name).icon}
+                  </div>
+                )}
+                <div>
+                  <div className="font-medium">{file.name}</div>
+                  <div className="text-xs text-gray-500">{formatFileSize(file.size)}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleFileSend} 
+                  disabled={uploadingFile || !connected}
+                  className="bg-primary text-white px-3 py-1 rounded text-sm disabled:bg-gray-400"
+                >
+                  {uploadingFile ? `${fileUploadProgress}%` : 'Gửi file'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setFile(null);
+                    setFilePreview(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
           )}
+          
+          {/* Hiển thị lỗi file nếu có */}
+          {fileError && (
+            <div className="mb-3 p-2 bg-red-100 text-red-700 rounded-lg">
+              {fileError}
+            </div>
+          )}
+          
+          {/* Input area */}
+          <div className="flex items-center gap-3">
+            {!myAddress ? (
+              <button onClick={connectWallet} className="w-full bg-primary text-white py-2 rounded">
+                Kết nối ví để chat
+              </button>
+            ) : (
+              <>
+                <label className="cursor-pointer p-2 bg-gray-200 rounded-full hover:bg-gray-300">
+                  📎
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileChange} 
+                    className="hidden" 
+                    disabled={!connected || uploadingFile} 
+                  />
+                </label>
+                <input
+                  type="text"
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSend()}
+                  placeholder={connected ? 'Nhập tin nhắn...' : 'Đang chờ kết nối...'}
+                  className="flex-1 border border-border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-700 text-text-main dark:text-white"
+                  disabled={!connected}
+                />
+                <button 
+                  onClick={handleSend} 
+                  disabled={!connected || !text.trim()} 
+                  className="bg-accent text-white px-4 py-2 rounded disabled:bg-accent/50"
+                >
+                  Gửi
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </main>
     </div>
