@@ -15,6 +15,9 @@ export default function GroupChat() {
   const [searchGroup, setSearchGroup] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [createForm, setCreateForm] = useState({ name: '', description: '', avatar: '' });
+  const [showSearchResults, setShowSearchResults] = useState(false); // Thêm state để hiển thị/ẩn kết quả tìm kiếm
+  const [avatarFile, setAvatarFile] = useState(null);
+  const avatarInputRef = useRef(null);
   // State cho main content
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupInfo, setGroupInfo] = useState(null);
@@ -83,31 +86,48 @@ export default function GroupChat() {
     setMyAddress(localStorage.getItem('wallet_address') || '');
   }, []);
 
-  // Lấy danh sách nhóm đã join (GunDB)
+  // Lấy danh sách nhóm đã join (GunDB) - Cải tiến để luôn hiển thị
   useEffect(() => {
     // Lắng nghe realtime tất cả group mà user là thành viên
     const handler = data => {
       if (!data) return;
-      const arr = [];
-      Object.keys(data).forEach(gid => {
-        let membersArr = [];
-        if (data[gid] && data[gid].members) {
-          if (Array.isArray(data[gid].members)) {
-            membersArr = data[gid].members;
-          } else if (typeof data[gid].members === 'object' && data[gid].members !== null) {
-            membersArr = Object.keys(data[gid].members).filter(addr => data[gid].members[addr]);
+      
+      // Sử dụng state function để tránh race condition
+      setGroupList(prevList => {
+        // Tạo map từ danh sách hiện tại để dễ tra cứu
+        const groupMap = {};
+        prevList.forEach(g => {
+          groupMap[g.groupId] = g;
+        });
+        
+        // Cập nhật hoặc thêm mới từ data
+        Object.keys(data).forEach(gid => {
+          if (data[gid] && typeof data[gid] === 'object' && data[gid].groupId) {
+            let membersArr = [];
+            if (data[gid].members) {
+              if (Array.isArray(data[gid].members)) {
+                membersArr = data[gid].members;
+              } else if (typeof data[gid].members === 'object' && data[gid].members !== null) {
+                membersArr = Object.keys(data[gid].members).filter(addr => data[gid].members[addr]);
+              }
+            }
+            
+            // Cập nhật hoặc thêm mới
+            groupMap[gid] = { 
+              ...data[gid], 
+              isMember: membersArr.includes(myAddress)
+            };
           }
-        }
-        if (membersArr.includes(myAddress)) {
-          arr.push({ ...data[gid] });
-        }
+        });
+        
+        // Chuyển map thành array để render
+        return Object.values(groupMap);
       });
-      setGroupList(arr);
     };
-    if (myAddress) {
-      // Lắng nghe tất cả group
-      getGroupInfo(null, handler); // null = all group
-    }
+    
+    // Lắng nghe tất cả group
+    getGroupInfo(null, handler); // null = all group
+    
     return () => {};
   }, [myAddress]);
 
@@ -217,13 +237,61 @@ export default function GroupChat() {
   const handleCreateGroupTelegram = async e => {
     e.preventDefault();
     if (!createForm.name.trim()) return;
-    const { groupId } = await createGroup({ ...createForm, admin: myAddress, members: selectedMembers });
-    setShowCreateModal(false);
-    setCreateForm({ name: '', description: '', avatar: '' });
-    setSelectedMembers([]);
-    setManualMember('');
-    setToast(`Tạo nhóm thành công! ID: ${groupId}`);
-    setSelectedGroupId(groupId);
+    
+    try {
+      // Upload avatar nếu có
+      let avatarUrl = createForm.avatar;
+      if (avatarFile) {
+        try {
+          const added = await ipfs.add(avatarFile);
+          avatarUrl = `http://127.0.0.1:8080/ipfs/${added.path}`;
+        } catch (err) {
+          console.error("Lỗi upload avatar:", err);
+          // Vẫn tiếp tục tạo nhóm nếu upload avatar thất bại
+        }
+      }
+      
+      const { groupId } = await createGroup({ 
+        ...createForm, 
+        avatar: avatarUrl, 
+        admin: myAddress, 
+        members: selectedMembers 
+      });
+      
+      setShowCreateModal(false);
+      setCreateForm({ name: '', description: '', avatar: '' });
+      setSelectedMembers([]);
+      setManualMember('');
+      setAvatarFile(null);
+      setToast(`Tạo nhóm thành công! ID: ${groupId}`);
+      setSelectedGroupId(groupId);
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setToast(`Lỗi tạo nhóm: ${err.message}`);
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
+  // Hàm xử lý upload avatar
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      // Hiển thị preview
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCreateForm(prev => ({ ...prev, avatar: event.target.result }));
+      };
+      reader.readAsDataURL(file);
+      
+      // Lưu file để upload khi tạo nhóm
+      setAvatarFile(file);
+    } catch (error) {
+      console.error("Lỗi khi xử lý file:", error);
+      setToast("Lỗi khi xử lý file ảnh");
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   // Sửa hàm tìm kiếm nhóm theo tên
@@ -238,10 +306,15 @@ export default function GroupChat() {
         typeof g.name === 'string' && g.name.toLowerCase().includes(keyword)
       );
       setSearchResults(results);
-      if (results.length === 0) setToast('Không tìm thấy nhóm nào phù hợp!');
+      setShowSearchResults(true); // Hiển thị kết quả tìm kiếm
+      if (results.length === 0) {
+        setToast('Không tìm thấy nhóm nào phù hợp!');
+        setTimeout(() => setToast(null), 3000);
+      }
     } catch {
       setSearchResults([]);
       setToast('Không tìm thấy nhóm!');
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -251,6 +324,8 @@ export default function GroupChat() {
       await joinGroup(gid, myAddress);
       setSelectedGroupId(gid);
       setToast('Tham gia nhóm thành công!');
+      // Tự động tắt thông báo sau 3 giây
+      setTimeout(() => setToast(null), 3000);
     } catch (e) {
       if (e.message === 'Bạn không phải thành viên nhóm này') {
         // Public group: tự động thêm mình vào nhóm
@@ -274,14 +349,22 @@ export default function GroupChat() {
           if (joined) {
             setSelectedGroupId(gid);
             setToast('Đã tự động thêm bạn vào nhóm!');
+            // Tự động tắt thông báo sau 3 giây
+            setTimeout(() => setToast(null), 3000);
           } else {
             setToast(lastErr ? lastErr.message : 'Không join được nhóm, thử lại sau!');
+            // Tự động tắt thông báo sau 3 giây
+            setTimeout(() => setToast(null), 3000);
           }
-    } catch (err) {
+        } catch (err) {
           setToast(err.message);
+          // Tự động tắt thông báo sau 3 giây
+          setTimeout(() => setToast(null), 3000);
         }
       } else {
         setToast(e.message);
+        // Tự động tắt thông báo sau 3 giây
+        setTimeout(() => setToast(null), 3000);
       }
     }
   };
@@ -436,37 +519,49 @@ export default function GroupChat() {
       {/* Sidebar */}
       <aside className="w-1/5 min-w-[320px] max-w-sm bg-background-light dark:bg-background-dark border-r border-border flex flex-col p-6">
         <header className="h-16 flex items-center mb-6">
-          <span className="text-2xl font-bold text-primary">DChat</span>
+          <span className="text-2xl font-bold text-primary">DCTLChat</span>
         </header>
         <h2 className="text-lg font-bold mb-4">Nhóm của bạn</h2>
         <button className="w-full bg-primary text-white py-2 rounded-lg font-bold mb-4 shadow-chat hover:bg-primary/90 transition" type="button" onClick={() => setShowCreateModal(true)}>Tạo nhóm mới</button>
         <div className="mb-4">
           <input className="w-full border border-border px-3 py-2 rounded-lg mb-2" placeholder="Tìm nhóm theo tên" value={searchGroup} onChange={e => setSearchGroup(e.target.value)} />
-          <button className="w-full bg-secondary text-white py-2 rounded-lg font-bold hover:bg-secondary/90 transition" onClick={handleSearchGroup}>Tìm nhóm</button>
-          {searchResults.length > 0 && (
+          <div className="flex gap-2 mb-4">
+            <button className="flex-1 bg-secondary text-white py-2 rounded-lg font-bold hover:bg-secondary/90 transition" onClick={handleSearchGroup}>Tìm nhóm</button>
+            {showSearchResults && (
+              <button className="bg-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-400 transition" onClick={() => setShowSearchResults(false)}>
+                ✕
+              </button>
+            )}
+          </div>
+          {showSearchResults && searchResults.length > 0 && (
             <div className="mt-2 space-y-2">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-bold">Kết quả tìm kiếm</h3>
+                <button className="text-xs text-gray-500 hover:text-red-500" onClick={() => setShowSearchResults(false)}>Đóng</button>
+              </div>
               {searchResults.map(group => {
                 const membersArr = group.members && typeof group.members === 'object' && !Array.isArray(group.members)
                   ? Object.keys(group.members).filter(addr => group.members[addr])
                   : group.members || [];
                 return (
-                  <div key={group.groupId} className="p-3 border rounded-lg bg-white dark:bg-gray-800 flex flex-col items-center">
-                    {group.avatar && (
-                      <img src={group.avatar} alt="avatar" className="w-12 h-12 rounded-full object-cover mb-2" />
-                    )}
-                    <div className="font-bold text-lg text-center break-words">{group.name || '(Không có tên nhóm)'}</div>
-                    <div className="text-xs text-gray-500 text-center mb-1">ID: {group.groupId}</div>
-                    <div className="text-xs text-gray-700 mb-2 text-center">{group.description}</div>
-                    <div className="text-xs text-gray-600 mb-1">Admin: <span className="font-mono">{group.admin}</span></div>
-                    <div className="text-xs text-gray-600 mb-1">Thành viên ({membersArr.length}):
-                      <span className="ml-1">{membersArr.slice(0, 3).map(m => <span key={m} className="mr-1 font-mono">{m.slice(0, 6)}... </span>)}</span>
-                      {membersArr.length > 3 && <span className="text-gray-400">...và {membersArr.length - 3} khác</span>}
+                  <div key={group.groupId} className="p-3 border rounded-lg bg-white dark:bg-gray-800 flex flex-col">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-primary overflow-hidden">
+                        {group.avatar ? <img src={group.avatar} alt="avatar" className="w-full h-full object-cover" /> : (group.name ? group.name[0] : 'G')}
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="font-bold truncate">{group.name}</div>
+                        <div className="text-xs text-gray-500 truncate">{group.groupId}</div>
+                      </div>
                     </div>
-                    {membersArr.includes(myAddress) ? (
-                      <div className="text-green-600 text-xs font-semibold text-center mt-2">Bạn đã tham gia nhóm này</div>
-                    ) : (
-                      <button className="bg-primary text-white px-3 py-1 rounded-lg mt-2 w-full font-bold hover:bg-primary/90 transition" onClick={() => handleJoinGroup(group.groupId)}>Tham gia nhóm</button>
-                    )}
+                    <div className="text-sm mb-2 line-clamp-2">{group.description || 'Không có mô tả'}</div>
+                    <div className="text-xs text-gray-500 mb-2">Thành viên: {membersArr.length}</div>
+                    <button 
+                      className="w-full bg-primary text-white py-1 rounded-lg hover:bg-primary/90 transition"
+                      onClick={() => handleJoinGroup(group.groupId)}
+                    >
+                      Tham gia
+                    </button>
                   </div>
                 );
               })}
@@ -474,17 +569,18 @@ export default function GroupChat() {
           )}
         </div>
         <div className="flex-1 overflow-y-auto space-y-4">
-          {groupList.length === 0 ? <div className="text-gray-400 text-sm">Bạn chưa tham gia nhóm nào</div> : (
+          {groupList.length === 0 ? <div className="text-gray-400 text-sm">Đang tải danh sách nhóm...</div> : (
             <ul className="space-y-2">
               {groupList.map(g => (
                 <li key={g.groupId} className={`flex items-center gap-3 p-2 rounded-lg hover:bg-primary/10 cursor-pointer transition ${selectedGroupId === g.groupId ? 'bg-primary/10' : ''}`} onClick={() => setSelectedGroupId(g.groupId)}>
                   <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-primary">
-                    {g.name ? g.name[0] : 'G'}
+                    {g.avatar ? <img src={g.avatar} alt="avatar" className="w-10 h-10 rounded-full object-cover" /> : (g.name ? g.name[0] : 'G')}
                   </div>
                   <div className="flex-1">
                     <div className="font-bold text-text-main dark:text-white">{g.name}</div>
                     <div className="text-xs text-text-muted">{g.groupId.slice(0, 8)}...</div>
                   </div>
+                  {g.isMember && <div className="text-xs bg-green-500 text-white px-2 py-0.5 rounded">Đã tham gia</div>}
                 </li>
               ))}
             </ul>
@@ -568,7 +664,38 @@ export default function GroupChat() {
             <form onSubmit={handleCreateGroupTelegram} className="space-y-2">
               <input className="w-full border px-2 py-1 rounded" placeholder="Tên nhóm" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} />
               <input className="w-full border px-2 py-1 rounded" placeholder="Mô tả" value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))} />
-              <input className="w-full border px-2 py-1 rounded" placeholder="Link avatar (tùy chọn)" value={createForm.avatar} onChange={e => setCreateForm(f => ({ ...f, avatar: e.target.value }))} />
+              
+              {/* Phần upload avatar */}
+              <div className="flex items-center gap-2">
+                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {createForm.avatar ? (
+                    <img src={createForm.avatar} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-gray-500">👥</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <label className="cursor-pointer bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-sm inline-block">
+                    Chọn ảnh đại diện
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      ref={avatarInputRef}
+                      onChange={handleAvatarChange} 
+                    />
+                  </label>
+                  {createForm.avatar && (
+                    <button 
+                      type="button"
+                      className="ml-2 text-xs text-red-500 hover:underline"
+                      onClick={() => setCreateForm(f => ({ ...f, avatar: '' }))}
+                    >
+                      Xóa
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="border rounded p-2 max-h-40 overflow-y-auto">
                 <div className="font-semibold text-sm mb-1">Chọn thành viên từ danh bạ:</div>
                 {contacts.length === 0 ? <div className="text-xs text-gray-400">Chưa có liên hệ</div> : contacts.map(c => (
@@ -622,3 +749,8 @@ export default function GroupChat() {
     </div>
   );
 }
+
+
+
+
+

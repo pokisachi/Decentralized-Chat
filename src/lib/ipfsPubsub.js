@@ -86,15 +86,24 @@ export function subscribeTopic(topic, onMessage) {
 }
 
 export async function publishMessage(topic, text, messageId = null, metadata = {}) {
-  const id = messageId || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`
-  const messageData = { id, text, timestamp: Date.now(), ...metadata }
-  const data = new TextEncoder().encode(JSON.stringify(messageData))
-  try {
-    await ipfs.pubsub.publish(topic, data)
-    console.log('Đã gửi pubsub:', topic, messageData)
-  } catch (err) {
-    console.error('Lỗi gửi pubsub:', err)
+  if (!topic) {
+    console.error('Lỗi: topic không được để trống');
+    throw new Error('Topic không được để trống');
   }
-  processedMessages.set(id, Date.now())
-  return messageData
+
+  const id = messageId || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+  const messageData = { id, text, timestamp: Date.now(), ...metadata };
+  const data = new TextEncoder().encode(JSON.stringify(messageData));
+  
+  try {
+    console.log(`Đang gửi tin nhắn đến topic "${topic}"...`);
+    await ipfs.pubsub.publish(topic, data);
+    console.log('✅ Đã gửi pubsub thành công:', topic, messageData);
+  } catch (err) {
+    console.error('❌ Lỗi gửi pubsub:', err);
+    throw err;
+  }
+  
+  processedMessages.set(id, Date.now());
+  return messageData;
 }

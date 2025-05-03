@@ -110,17 +110,17 @@ export default function ChatRoom() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       await provider.send('eth_requestAccounts', []);
-      const signer = provider.getSigner();
+      const signer = await provider.getSigner();
       const address = await signer.getAddress();
       if (typeof address !== 'string') {
         console.warn('[ChatRoom] Địa chỉ ví không phải string:', address);
       }
       setMyAddress(safeAddress(address));
       localStorage.setItem('wallet_address', safeAddress(address));
-      // Add to contacts if not already there
       setContacts(prev => prev.includes(safeAddress(address)) ? prev : [...prev, safeAddress(address)]);
     } catch (err) {
-      setError('Không thể kết nối ví!');
+      console.error("Lỗi kết nối ví:", err);
+      setError(`Không thể kết nối ví: ${err.message || 'Lỗi không xác định'}`);
     }
   };
 
@@ -527,150 +527,101 @@ export default function ChatRoom() {
   }
 
   return (
-    <div className="flex h-screen flex-col md:flex-row">
-      {toast && (
-        <div className="fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50 animate-bounce">
-          {toast}
+    <div className="flex h-screen font-inter bg-background-light dark:bg-background-dark text-text-main dark:text-white">
+      {/* Sidebar giống GroupChat */}
+      <aside className="w-1/4 min-w-[280px] max-w-sm bg-white dark:bg-gray-800 border-r border-border flex flex-col p-4">
+        <header className="h-12 flex items-center mb-4">
+          <span className="text-xl font-bold text-primary">DChat</span>
+        </header>
+        <div className="flex-1 overflow-y-auto space-y-3">
+          {messages.map((m, i) => (
+            <div key={i} className="text-xs text-text-muted">{/* placeholder for recent chats */}</div>
+          ))}
         </div>
-      )}
-      {/* Header cho desktop */}
-      <div className="hidden md:flex items-center justify-between bg-white border-b px-4 py-2">
-        <button onClick={() => navigate('/contacts')} className="text-blue-600 hover:underline mr-4">
-          &larr; Danh bạ
-        </button>
-        <div className="font-bold text-lg">
-          {peerId ? `Chat với: ${shortId(peerId)}` : 'Chọn peer để chat'}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={peerOnline ? 'text-green-600' : 'text-gray-600'}>
-            {peerOnline ? '● Online' : '○ Offline'}
-          </span>
-          {!connected && !connecting && (
-            <button
-              onClick={startCall}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-            >
-              Kết nối
-            </button>
-          )}
-          {connecting && (
-            <span className="text-blue-600">Đang kết nối...</span>
-          )}
-          {/* Nút mở profile */}
-          <button className="bg-gray-200 px-2 py-1 rounded text-xs" onClick={() => setShowProfile(true)}>
-            Profile
+      </aside>
+
+      {/* Main chat area */}
+      <main className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="h-14 flex items-center justify-between px-6 bg-white dark:bg-gray-900 border-b border-border">
+          <button onClick={() => navigate('/contacts')} className="text-blue-600 hover:underline">
+            &larr; Danh bạ
           </button>
+          <div className="font-bold text-lg">
+            {peerId ? `Chat với: ${shortId(peerId)}` : 'Chọn peer để chat'}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={peerOnline ? 'text-green-600' : 'text-gray-600'}>
+              {peerOnline ? '● Online' : '○ Offline'}
+            </span>
+            {!connected && !connecting && (
+              <button onClick={startCall} className="bg-primary text-white px-3 py-1 rounded text-sm">
+                Kết nối
+              </button>
+            )}
+            {connecting && <span className="text-primary">Đang kết nối...</span>}
+            <button onClick={() => setShowProfile(true)} className="bg-secondary text-white px-2 py-1 rounded text-xs">
+              Profile
+            </button>
+          </div>
         </div>
-      </div>
-      
-      {/* Main chat */}
-      <div className="flex-1 flex flex-col">
-        {/* Chat list */}
-        <div ref={chatContainerRef} className="flex-1 overflow-auto p-4 bg-gray-50">
-          {(!roomId || messages.length === 0) ? (
-            <div className="text-gray-500 text-center mt-8">
-              {myAddress ? 
-                'Chưa có tin nhắn, hãy kết nối và bắt đầu trò chuyện' : 
-                'Vui lòng kết nối ví MetaMask để bắt đầu'
-              }
+
+        {/* Messages list */}
+        <div ref={chatContainerRef} className="flex-1 overflow-auto p-6 bg-background-light dark:bg-background-dark">
+          {(!peerId || messages.length === 0) ? (
+            <div className="text-text-muted text-center mt-8">
+              {myAddress ? 'Chưa có tin nhắn, bắt đầu trò chuyện đi!' : 'Vui lòng kết nối ví MetaMask để chat'}
             </div>
           ) : (
-            messages.map((m, i) => (
-              <div key={i} className={`my-2 flex ${m.from === 'me' ? 'flex-row-reverse' : ''} items-start`}>
-                <div className="w-8 h-8 mr-2 ml-2">
-                  {m.from === 'me' ? (
-                    myAvatar ? <img src={myAvatar} alt="avatar" className="w-8 h-8 rounded-full object-cover border" /> : <span className="inline-block w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">👤</span>
-                  ) : (
-                    peerAvatar ? <img src={peerAvatar} alt="avatar" className="w-8 h-8 rounded-full object-cover border" /> : <span className="inline-block w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">👤</span>
-                  )}
-                </div>
-                <div className={`inline-block max-w-xs px-3 py-2 rounded ${m.from === 'me' ? 'bg-blue-100' : 'bg-gray-200'}`}> 
-                  <div className="font-semibold text-xs text-gray-600 mb-1">
-                    {m.from === 'me' ? shortId(myAddress) : shortId(peerId)}
+            messages.map((m, i) => {
+              const isMe = m.from === 'me';
+              return (
+                <div key={i} className={`my-3 flex items-start ${isMe ? 'flex-row-reverse' : ''}`}> 
+                  <div className="w-8 h-8 mx-2">
+                    {isMe ? (
+                      myAvatar ? <img src={myAvatar} className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 rounded-full bg-gray-300" />
+                    ) : (
+                      peerAvatar ? <img src={peerAvatar} className="w-8 h-8 rounded-full border" /> : <div className="w-8 h-8 rounded-full bg-gray-300" />
+                    )}
                   </div>
-                  {m.content}
+                  <div className={`max-w-xs px-3 py-2 rounded-lg ${isMe ? 'bg-primary/10' : 'bg-white dark:bg-gray-700 border border-border'}`}>
+                    <div className="text-xs text-text-muted mb-1">{isMe ? shortId(myAddress) : shortId(peerId)}</div>
+                    {m.content}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
-        
-        {/* Input bar */}
-        <div className="p-4 border-t flex flex-col gap-2">
+
+        {/* Input area */}
+        <div className="p-4 border-t border-border bg-white dark:bg-gray-800 flex items-center gap-3">
           {!myAddress ? (
-            <button
-              onClick={connectWallet}
-              className="bg-blue-600 text-white px-4 py-2 rounded w-full"
-            >
+            <button onClick={connectWallet} className="w-full bg-primary text-white py-2 rounded">
               Kết nối ví để chat
             </button>
           ) : (
             <>
-              <div className="flex gap-2 items-center">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  disabled={uploadingFile || !connected}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className={`cursor-pointer ${!connected ? 'opacity-50' : ''}`}>
-                  <span role="img" aria-label="attach">📎</span>
-                </label>
-                <input
-                  value={text}
-                  onChange={e => setText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSend()}
-                  placeholder={connected ? "Nhập tin..." : "Đang chờ kết nối..."}
-                  className="flex-1 border px-3 py-2 rounded"
-                  disabled={!connected}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!connected || !text.trim()}
-                  className="bg-blue-600 text-white px-4 py-2 rounded disabled:bg-blue-300"
-                >
-                  Gửi
-                </button>
-              </div>
-              {fileError && <div className="bg-red-100 text-red-700 p-2 rounded text-sm">{fileError}</div>}
-              {file && (
-                <div className="flex justify-between items-center bg-blue-50 p-2 rounded">
-                  <div>
-                    <div className="font-semibold">{file.name}</div>
-                    <div className="text-sm text-gray-500">{formatFileSize(file.size)}</div>
-                  </div>
-                  <button onClick={handleFileSend} disabled={!connected || uploadingFile}
-                    className="bg-indigo-600 text-white px-3 py-1 rounded disabled:bg-indigo-300">
-                    {uploadingFile ? 'Đang tải...' : 'Gửi File'}
-                  </button>
-                </div>
-              )}
+              <label className="cursor-pointer p-2 bg-gray-200 rounded-full">
+                📎
+                <input type="file" onChange={handleFileChange} className="hidden" disabled={!connected} />
+              </label>
+              <input
+                type="text"
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                placeholder={connected ? 'Nhập tin nhắn...' : 'Đang chờ kết nối...'}
+                className="flex-1 border border-border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-700 text-text-main dark:text-white"
+                disabled={!connected}
+              />
+              <button onClick={handleSend} disabled={!connected || !text.trim()} className="bg-accent text-white px-4 py-2 rounded disabled:bg-accent/50">
+                Gửi
+              </button>
             </>
           )}
         </div>
-      </div>
-      {/* Modal Profile */}
-      {showProfile && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-xs relative">
-            <button className="absolute top-2 right-2 text-gray-400 hover:text-red-500" onClick={() => setShowProfile(false)}>✕</button>
-            <h2 className="text-lg font-bold mb-2">Thông tin cá nhân</h2>
-            <div className="mb-2"><span className="font-semibold">Địa chỉ ví:</span><br/><span className="font-mono text-xs break-all">{myAddress}</span></div>
-            <button className="w-full bg-blue-500 text-white py-1 rounded mt-2" onClick={() => {
-              if ('Notification' in window && Notification.permission === 'granted') {
-                console.log('Test notification: OK');
-                new Notification('Test Notification', { body: 'Thông báo hoạt động!', icon: '/icon-192.png', tag: 'dchat-test' });
-              } else {
-                console.log('Test notification: Không gửi được, permission =', Notification.permission);
-                alert('Notification chưa được cấp quyền hoặc không hỗ trợ!');
-              }
-            }}>Test Notification</button>
-            <button className="w-full bg-red-600 text-white py-1 rounded mt-4" onClick={() => { localStorage.clear(); window.location.reload(); }}>Sign out</button>
-          </div>
-        </div>
-      )}
+      </main>
     </div>
   );
 }

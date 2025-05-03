@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ethers } from 'ethers';
-
 import { Magic } from 'magic-sdk';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -13,10 +18,10 @@ const magic = new Magic('pk_live_459DF667128B1FBD', { network: 'mainnet' });
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [password] = useState(''); // không dùng password trong Magic Link
   const [loading, setLoading] = useState(false);
 
-  // 1) Metamask login flow
+  // Metamask login
   const loginWithMetamask = async () => {
     if (!window.ethereum) {
       alert('Vui lòng cài Metamask extension!');
@@ -41,7 +46,7 @@ export default function Login() {
     }
   };
 
-  // 2) Magic Link login flow
+  // Magic Link login
   const loginWithMagic = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -62,91 +67,59 @@ export default function Login() {
   };
 
   return (
-    <div className="display: flex; justify-content: center; align-items: center; height: 100vh; background: #F3F4F6;">
-      <div className="w-full max-w-md ">
-        <Card className="w-[360px] p-[32px] bg-white rounded-[12px] shadow-[0_4px_12px_rgba(0,0,0,0.05)] flex flex-col gap-[16px] border-0">
-          <CardHeader className="bg-transparent p-0 text-center">
-
-            <div className="flex justify-center mb-4">
-              <div className='text-2xl font-extrabold text-blue-700'>DChat</div>
-            </div>
-            <CardTitle className="text-2xl font-extrabold text-blue-700">
-              Đăng nhập vào DChat
-              <span className="inline-block bg-blue-100 rounded-full p-3">
-                <svg width="32" height="32" fill="none" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#2563eb"/><path d="M10 16.5l4 4 8-8" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </span>
-            </div>
-            <CardTitle className="text-2xl font-extrabold text-blue-700">
-              Chào mừng đến Chat Phi Tập Trung
-            </CardTitle>
-            <p className="mt-2 text-gray-500 text-sm">Bảo mật, riêng tư, không phụ thuộc máy chủ trung gian.</p>
-          </CardHeader>
-
-          <CardContent className="bg-transparent p-0 space-y-6">
-            <form onSubmit={loginWithMagic} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="example@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  autoComplete="email"
-                  aria-label="Email"
-                />
-              </div>
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                  Mật khẩu
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Mật khẩu"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  autoComplete="current-password"
-                  aria-label="Password"
-                />
-              </div>
-              <Button type="submit" className="w-full py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary/90 transition" disabled={loading || !email}>
-                {loading ? 'Đang xử lý...' : 'Đăng nhập với Magic Link'}
-              </Button>
-            </form>
-
-
-            <div className="relative my-6">
-              <span className="absolute inset-0 flex items-center">
-                <span className="w-full border-t bg-transparent" />
-              </span>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-gray-500">hoặc</span>
-              </div>
-            </div>
-
-            <Button
-
-              className="w-full"
-              onClick={loginWithMetamask}
-              disabled={loading}
-            >
-              {loading ? 'Đang xử lý...' : 'Đăng nhập với Metamask'}
-            </Button>
-          </CardContent>
-
-          <CardFooter className="bg-transparent p-0 text-center">
-            <p className="text-xs text-gray-400">
-              Bằng việc đăng nhập, bạn đồng ý với <a href="#" className="underline hover:text-blue-600">Điều khoản</a> và <a href="#" className="underline hover:text-blue-600">Chính sách</a> của chúng tôi.
-            </p>       
-          </CardFooter>
-        </Card>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 w-full max-w-md">
+        {/* Logo */}
+        <h1 className="text-center text-3xl font-bold text-blue-800 mb-6">DChat</h1>
+        {/* Tiêu đề */}
+        <h2 className="text-center text-2xl font-extrabold text-blue-700 mb-2">
+          Đăng nhập vào DChat
+        </h2>
+        {/* Mô tả */}
+        <p className="text-center text-sm text-gray-600 dark:text-gray-300 mb-6">
+          Bảo mật, riêng tư, không phụ thuộc máy chủ trung gian.
+        </p>
+        {/* Form Magic Link */}
+        <form onSubmit={loginWithMagic} className="space-y-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
+              required
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="you@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!email || loading}
+            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
+          >
+            {loading ? 'Đang xử lý...' : 'Magic Link'}
+          </button>
+        </form>
+        {/* Divider */}
+        <div className="flex items-center mb-6">
+          <div className="flex-1 h-px bg-gray-300" />
+          <span className="px-2 text-xs text-gray-500 uppercase">hoặc</span>
+          <div className="flex-1 h-px bg-gray-300" />
+        </div>
+        {/* Metamask */}
+        <button
+          onClick={loginWithMetamask}
+          disabled={loading}
+          className="w-full py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition"
+        >
+          {loading ? 'Đang xử lý...' : 'Metamask'}
+        </button>
+        {/* Footer */}
+        <p className="mt-6 text-xs text-center text-gray-500">
+          Bằng việc đăng nhập, bạn đồng ý với{' '}
+          <a href="#" className="underline">Điều khoản</a> và{' '}
+          <a href="#" className="underline">Chính sách</a>.
+        </p>
       </div>
     </div>
   );

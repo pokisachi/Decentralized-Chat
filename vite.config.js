@@ -1,27 +1,27 @@
 // vite.config.js
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { fileURLToPath, URL } from "url";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { fileURLToPath, URL } from 'url'
 
 export default defineConfig({
-  plugins: [react()],
   resolve: {
     alias: {
-      // ánh xạ '@' -> 'src' mà không cần __dirname
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-      
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  plugins: [
+    react(),
+  ],
   optimizeDeps: {
     include: [
       'libp2p',
       '@libp2p/websockets',
-      '@libp2p/webtransport',
-      '@libp2p/tcp',
-      '@libp2p/mplex',
       '@chainsafe/libp2p-noise',
-      '@libp2p/gossipsub',
+      '@chainsafe/libp2p-gossipsub',
+      '@libp2p/mplex',
       'uint8arrays'
     ]
   },
-});
+})
+
+

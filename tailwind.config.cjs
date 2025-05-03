@@ -47,6 +47,6 @@ module.exports = {
     },
   },
   plugins: [
-    require("tailwindcss-animate")
+    // Loại bỏ plugin tailwindcss-animate
   ],
 };
